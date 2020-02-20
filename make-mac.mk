@@ -33,8 +33,9 @@ ifeq ($(ZT_OFFICIAL_RELEASE),1)
 	ZT_USE_MINIUPNPC=1
 	CODESIGN=codesign
 	PRODUCTSIGN=productsign
-	CODESIGN_APP_CERT="Developer ID Application: ZeroTier, Inc (8ZD9JUCZ4V)"
-	CODESIGN_INSTALLER_CERT="Developer ID Installer: ZeroTier, Inc (8ZD9JUCZ4V)"
+	CODESIGN_APP_CERT="Developer ID Application: LeftBrain Ltd (A73QN3SY4T)"
+	CODESIGN_INSTALLER_CERT="Developer ID Installer: LeftBrain Ltd (A73QN3SY4T)"
+	AC_USERNAME="accounts@leftbrain.it"
 else
 	DEFS+=-DZT_SOFTWARE_UPDATE_DEFAULT="\"download\""
 endif
@@ -86,14 +87,14 @@ ext/x64-salsa2012-asm/salsa2012.o:
 
 mac-agent: FORCE
 	$(CC) -Ofast -o MacEthernetTapAgent osdep/MacEthernetTapAgent.c
-	$(CODESIGN) -f -s $(CODESIGN_APP_CERT) MacEthernetTapAgent
+	$(CODESIGN) --options=runtime -f -s $(CODESIGN_APP_CERT) MacEthernetTapAgent
 
 one:	$(CORE_OBJS) $(ONE_OBJS) one.o mac-agent
 	$(CXX) $(CXXFLAGS) -o zerotier-one $(CORE_OBJS) $(ONE_OBJS) one.o $(LIBS)
 	$(STRIP) zerotier-one
 	ln -sf zerotier-one zerotier-idtool
 	ln -sf zerotier-one zerotier-cli
-	$(CODESIGN) -f -s $(CODESIGN_APP_CERT) zerotier-one
+	$(CODESIGN) --options=runtime -f -s $(CODESIGN_APP_CERT) zerotier-one
 
 zerotier-one: one
 
@@ -112,7 +113,7 @@ core: libzerotiercore.a
 
 macui:	FORCE
 	cd macui && xcodebuild -target "ZeroTier One" -configuration Release
-	$(CODESIGN) -f -s $(CODESIGN_APP_CERT) "macui/build/Release/ZeroTier One.app"
+	$(CODESIGN) --options=runtime -f -s $(CODESIGN_APP_CERT) "macui/build/Release/ZeroTier One.app"
 
 #cli:	FORCE
 #	$(CXX) $(CXXFLAGS) -o zerotier cli/zerotier.cpp osdep/OSUtils.cpp node/InetAddress.cpp node/Utils.cpp node/Salsa20.cpp node/Identity.cpp node/SHA512.cpp node/C25519.cpp -lcurl
@@ -132,13 +133,16 @@ mac-dist-pkg: FORCE
 	if [ -f "ZeroTier One Signed.pkg" ]; then mv -f "ZeroTier One Signed.pkg" "ZeroTier One.pkg"; fi
 	rm -f zt1_update_$(ZT_BUILD_PLATFORM)_$(ZT_BUILD_ARCHITECTURE)_*
 	cat ext/installfiles/mac-update/updater.tmpl.sh "ZeroTier One.pkg" >zt1_update_$(ZT_BUILD_PLATFORM)_$(ZT_BUILD_ARCHITECTURE)_$(ZT_VERSION_MAJOR).$(ZT_VERSION_MINOR).$(ZT_VERSION_REV)_$(ZT_VERSION_BUILD).exe
-
+	xcrun altool --notarize-app -f "ZeroTier One.pkg" --primary-bundle-id it.leftbrain.zerotier.pkg --username "$(AC_USERNAME)" -p "@keychain:AC_PASSWORD"
 # For ZeroTier, Inc. to build official signed packages
 official: FORCE
 	make clean
 	make ZT_OFFICIAL_RELEASE=1 -j 8 one
 	make ZT_OFFICIAL_RELEASE=1 macui
 	make ZT_OFFICIAL_RELEASE=1 mac-dist-pkg
+
+staple: FORCE
+	xcrun stapler staple "ZeroTier One.pkg"
 
 clean:
 	rm -rf MacEthernetTapAgent *.dSYM build-* *.a *.pkg *.dmg *.o node/*.o controller/*.o service/*.o osdep/*.o ext/http-parser/*.o $(CORE_OBJS) $(ONE_OBJS) zerotier-one zerotier-idtool zerotier-selftest zerotier-cli zerotier doc/node_modules macui/build zt1_update_$(ZT_BUILD_PLATFORM)_$(ZT_BUILD_ARCHITECTURE)_*
